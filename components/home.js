@@ -78,7 +78,6 @@ const loadShopModal = () => {
 const ShopModal = dynamic(loadShopModal, { ssr: false });
 import HudCorner from "@/components/ui/hudCorner";
 import PlayerCard from "@/components/ui/playerCard";
-import AdFreeChip from "@/components/ui/adFreeChip";
 import StampsTile from "@/components/shop/stampsTile";
 import AccountBtn from "@/components/ui/accountBtn";
 import EmoteReactions from "@/components/emoteReactions";
@@ -108,12 +107,9 @@ import StreetView from "./streetview/streetView";
 const CustomStreetView = dynamic(() => import("./streetview/customStreetView"), { ssr: false });
 // import getTimeString, { getMaintenanceDate } from "./maintenanceTime";
 // import MaintenanceBanner from "./MaintenanceBanner";
-import PlaywireAd from "./bannerAdPlaywire";
 import useAdFree from "@/lib/adFree";
-import GameDistributionBanner from "./bannerAdGameDistribution";
 
 // Module constants, not inline literals in JSX — same ruling as gameUI.js's
-// AD_TYPES_*: stable references hit PlaywireAd's propsEqual `a.types ===
 // b.types` fast path instead of an element-wise compare on every render of
 // this 5000+ line component.
 const HOME_AD_TYPES_SHORT = [[300, 250]];
@@ -2247,7 +2243,6 @@ export default function Home({ initialScreen, dailyBootstrap, initialLocation = 
         });
         // Playwire pageviews are NOT registered here: each ad slot mount
         // declares its layout via spaAds({countPageView: true}), so the
-        // slot lifecycle IS the pageview signal (bannerAdPlaywire.js).
     }, [screen]);
 
     // game_start = a round is actually in front of the player. Every mode
@@ -4753,8 +4748,6 @@ export default function Home({ initialScreen, dailyBootstrap, initialLocation = 
         multiplayerState?.gameData?.public &&
         multiplayerState?.gameData?.duel
     );
-    const multiplayerPlaywireAdShown = hudCornerOnQueue || multiplayerMatchedDuelWaiting || multiplayerGameUiShown;
-    const multiplayerTimerShownForAd = multiplayerGameUiShown && !(
         multiplayerShowAnswer ||
         (multiplayerGameState === 'getready' && multiplayerState?.gameData?.curRound === 1) ||
         multiplayerGameState === 'end'
@@ -5219,10 +5212,7 @@ export default function Home({ initialScreen, dailyBootstrap, initialLocation = 
                 // removes this profile only after its own DOM has committed.
                 onOpenShop={openShopFromAccount}
             />}
-            {/* The Stamps shop. Mounted ONLY while open, which is what tears the
-                ad-free countdown interval down on close — ShopModal plays its
-                own exit animation first and then calls back here to unmount. */}
-            {shopModalOpen && (
+{shopModalOpen && (
                 <ShopModal
                     session={session}
                     setSession={setSession}
@@ -5325,19 +5315,8 @@ export default function Home({ initialScreen, dailyBootstrap, initialLocation = 
 
             {/* Coolmath splash is now rendered statically in _document.js and removed via useEffect */}
             {/* Site background image is rendered via body::before in _document.js */}
-
-            {/* data-nosnippet: everything in here is game chrome, not prose —
-                Google was assembling search snippets out of it ("© Google
-                Google Adivinar", the guess button, SV attribution) instead of
-                using the meta description. Snippet-only; indexing unaffected. */}
-            <main className={`home`} id="main" data-nosnippet="">
-
-                {/* Daily challenge rules are fixed for everyone (no NMPZ, road
-                    labels on). gameOptions still holds whatever the last
-                    singleplayer toggle or multiplayer game stamped into it
-                    (nm/npz/showRoadName), so the shared pano must not read
-                    those while the daily owns it. */}
-                {((screen === "singleplayer" || screen === "countryGuesser" || screen === "multiplayer") && (gameOptions?.nm || chinaMode)) ? (
+<main className={`home`} id="main" data-nosnippet="">
+{((screen === "singleplayer" || screen === "countryGuesser" || screen === "multiplayer") && (gameOptions?.nm || chinaMode)) ? (
                     /* No Move + NMPZ modes, plus ChinaGuessr: the in-house
                        WebGL pano replaces the Google embed. npz freezes
                        pan/zoom. SP, country/
@@ -5484,19 +5463,8 @@ export default function Home({ initialScreen, dailyBootstrap, initialLocation = 
                         aria-hidden="true"
                     />
                 )}
-
-                {/* Loading overlay - covers iframe with background image to prevent white flicker.
-                    newUserBooting: a new user's bootstrap (A/B fetch → onboarding start)
-                    has NOTHING else on screen (home UI + navbar are gated) — without the
-                    spinner that window is a dead static image. */}
-                <div className={`loading-overlay ${(loading || mapSwitchMaskShown || newUserBooting) ? 'loading-overlay--visible' : ''}`}>
-                    {/* var(--site-bg) = the background _document.js declared and
-                        preloaded pre-paint, so this reuses the already-cached
-                        image and follows a purchased one. It used to be a
-                        hardcoded street2 NextImage with `priority`, which made
-                        every visitor download a second full-size hero image and
-                        kept the loading screen on art the menu was not using. */}
-                    <div
+<div className={`loading-overlay ${(loading || mapSwitchMaskShown || newUserBooting) ? 'loading-overlay--visible' : ''}`}>
+<div
                         aria-hidden="true"
                         style={{
                             position: "absolute",
@@ -5692,38 +5660,11 @@ export default function Home({ initialScreen, dailyBootstrap, initialLocation = 
                         </button>
                     </div>
                 )}
-
-                {/* onboardingCompleted === true: a new user's first paint is
-                    screen "home" during the A/B bootstrap — without this gate
-                    the ad flashes before screen flips to onboarding. */}
-                {/* Home menu banner — Playwire, Nitro-style mount/unmount
+{/* Home menu banner — Playwire, Nitro-style mount/unmount
                     lifecycle (spaAds re-inits per mount — see
-                    bannerAdPlaywire.js). Sizes picked client-side:
                     320x50 → head1, 300x250 → cntr1, so phones get the small
                     banner like the Nitro era. */}
-                {/* !adFree: the bought pass. lib/adFree.js reads the expiry off
-                    the session, so the purchase lands here on the same tick and
-                    the slot unmounts (out of the DOM, not hidden; RAMP reclaims
-                    the unit on the next spaAds declare). */}
-                {!adFree && screen === 'home' && onboardingCompleted === true && !inCrazyGames && !inPoki && !process.env.NEXT_PUBLIC_COOLMATH && !process.env.NEXT_PUBLIC_GAMEDISTRIBUTION &&
-                    <div className="home_ad">
-                        <PlaywireAd
-                            selectorId="pw-home-ad"
-                            showAdvertisementText={false} screenH={height} types={height < 510 ? HOME_AD_TYPES_SHORT : HOME_AD_TYPES_TALL} screenW={width} vertThresh={width < 600 ? 0.28 : 0.5} />
-                    </div>
-                }
-                {/* One continuous multiplayer slot, not a queue copy. This
-                    condition stays true across queue → paired waiting → GameUI,
-                    so React preserves the PlaywireAd instance and its creative;
-                    GameUI deliberately owns Playwire only for non-multiplayer. */}
-                {!adFree && multiplayerPlaywireAdShown && !inCrazyGames && !inPoki && !process.env.NEXT_PUBLIC_COOLMATH && !process.env.NEXT_PUBLIC_GAMEDISTRIBUTION && !process.env.NEXT_PUBLIC_SCHOOLGUESSR &&
-                    <div className={`topAdFixed ${multiplayerTimerShownForAd ? 'moreDown' : ''}`}>
-                        <PlaywireAd
-                            selectorId="pw-game-ad"
-                            showAdvertisementText={false} screenH={height} types={MULTIPLAYER_AD_TYPES_LEADERBOARD} screenW={Math.max(400, width - 450)} vertThresh={0.3} />
-                    </div>
-                }
-                {inGameDistribution && screen === 'home' && onboardingCompleted === true && (
+{inGameDistribution && screen === 'home' && onboardingCompleted === true && (
                     <div className="home_ad">
                         <GameDistributionBanner
                             id="gd-banner-home"
@@ -5733,61 +5674,19 @@ export default function Home({ initialScreen, dailyBootstrap, initialLocation = 
                 <span id="g2_playerCount" className={`bigSpan onlineText desktop ${screen !== 'home' ? 'notHome' : ''} ${(screen === 'singleplayer' || screen === 'onboarding' || screen === 'countryGuesser' || screen === 'daily' || (screen === 'home' && onboardingCompleted !== true) || (multiplayerState?.inGame && !['waitingForPlayers', 'findingGame', 'findingOpponent'].includes(multiplayerState?.gameData?.state)) || !multiplayerState?.connected || !multiplayerState?.playerCount) ? 'hide' : ''}`}>
                     {maintenance ? text("maintenanceMode") : text("onlineCnt", { cnt: multiplayerState?.playerCount || 0 })}
                 </span>
-
-                {/* reload button for public game. duelReloadBtnTop is 90 unless
-                    the collision probe found the HP-bar name pill actually
-                    covering it (long teammate names in team duels).
-                    NOTE (July 24 flicker audit): the per-round remount here is
-                    fine — .navbar .navBtn's hudEnter can't reach this button
-                    (it renders outside the navbar) and no other rule animates
-                    it, so appearing at "guess" is already instant. Verified;
-                    don't "fix" this again. */}
-                {multiplayerState?.gameData?.duel && multiplayerState?.gameData?.state === "guess" && (
+{multiplayerState?.gameData?.duel && multiplayerState?.gameData?.state === "guess" && (
                     <div className="gameBtnContainer" style={{ position: 'fixed', top: `${duelReloadBtnTop}px`, left: width > 830 ? '10px' : '7px', zIndex: 1000000 }}>
 
                         <button ref={duelReloadBtnRef} className="gameBtn navBtn backBtn reloadBtn" onClick={() => reloadBtnPressed()}><img src={asset("/return.png")} alt="reload" height={13} style={{ filter: 'invert(1)', transform: 'scale(1.5)' }} /></button>
                     </div>
                 )}
-
-
-
-                {/* THE TOP-RIGHT CORNER — one flex column (styles/playerCard.css).
-                    It used to be five separately-fixed elements (username pill,
-                    friends icon, league chip, Stamps balance, Maps button) whose
-                    vertical stacking was a set of hand-tuned `top:` values that
-                    quoted each other in comments, plus a whole --below-login
-                    variant of the Maps button whose only job was dodging the
-                    taller login button above it. Stacking is computed now, so
-                    none of those numbers survive and nothing can overlap.
-
-                    ORDER IS PLAIN READING ORDER. The old row was row-reverse
-                    with a load-bearing DOM order because two siblings shared one
-                    fixed coordinate and each carried its own entrance animation.
-                    The column owns both now: the entrance is on .hudCorner
-                    itself, so a child mounting later (the Stamps flag arriving)
-                    cannot replay anything.
-
-                    Modals hide the column with visibility, never an unmount —
-                    ONE site, replacing the five places that contract used to be
-                    restated at. */}
-                {/* onboardingCompleted === true is the navbar's `shown` gate,
+{/* onboardingCompleted === true is the navbar's `shown` gate,
                     restated: a brand-new user's FIRST PAINT is screen "home"
                     while the A/B variant resolves, and this column no longer
                     lives inside the navbar to inherit that guard. Without it the
                     login button flashes in the corner for a frame before
                     onboarding takes over. */}
-                {/* ALSO ON THE MATCHMAKING QUEUE, not just home. Waiting for a
-                    match is dead time the player is already staring at, and the
-                    card is where their rating, tier and Stamps live — so it is
-                    the natural thing to look at while the clock runs. It also
-                    replaces the bare friends icon the navbar used to show here
-                    (see the gate in components/ui/navbar.js): that button had
-                    nothing to do in a matchmade 1v1, and the card's menu already
-                    contains Friends for anyone who wants it.
-                    The queue term mirrors multiplayerHome.js's queueMode — 2v2
-                    stage 1 is excluded because it renders inside the lobby card,
-                    which has its own roster and its own corner. */}
-                {(hudCornerOnHome || hudCornerOnQueue) && !HIDE_ACCOUNT_UI && (
+{(hudCornerOnHome || hudCornerOnQueue) && !HIDE_ACCOUNT_UI && (
                     <HudCorner covered={accountModalOpen || mapModal} tight={hudCornerOnQueue} leaving={cornerLeaving}>
                         {session?.token?.secret ? (
                             <PlayerCard
@@ -5822,22 +5721,9 @@ export default function Home({ initialScreen, dailyBootstrap, initialLocation = 
 
                             HOME ONLY — see hudCornerOnQueue. */}
                         {hudCornerOnHome && <StampsTile session={session} onOpen={openShopFromHome} />}
-
-                        {/* The running ad-free pass, directly under the card
-                            that sold it. Renders nothing at all unless a pass is
-                            live, which is why it is unconditional here. See
-                            components/ui/adFreeChip.js: buying one used to be
-                            invisible the moment the shop closed. */}
-                        {hudCornerOnHome && <AdFreeChip session={session} />}
-
-                        {/* Community Maps LEFT THIS COLUMN — it is a footer
-                            button now. It was never account chrome and never a
-                            game mode; it sat here only because this is where
-                            loose buttons had accumulated, and pairing it with
-                            the stamps tile meant its label had to track a type
-                            size chosen for a currency balance. See .footer_btns
-                            below. */}
-                    </HudCorner>
+{hudCornerOnHome &&
+}
+</HudCorner>
                 )}
 
                 {/* Daily challenge screen (landing → game → results) */}
@@ -5921,12 +5807,7 @@ export default function Home({ initialScreen, dailyBootstrap, initialLocation = 
                                                     }}>
                                                     {text("singleplayer")}
                                                 </button>
-                                                {/* Ranked shows for guests too — clicking opens the link-Google
-                                                    conversion modal instead of the queue (server publicDuel
-                                                    requires accountId anyway). Hidden on the no-account builds
-                                                    (CoolMath / Poki / GameDistribution), where there is no login
-                                                    surface at all for that modal to lead to. */}
-                                                {!HIDE_ACCOUNT_UI && (
+{!HIDE_ACCOUNT_UI && (
                                                     <button className="g2_nav_text ranked" aria-label="Duels" onClick={() => {
                                                         if (!session?.token?.secret) {
                                                             openLoginUpsell('ranked');
@@ -6223,12 +6104,7 @@ singlePlayerRound={singlePlayerRound} setSinglePlayerRound={setSinglePlayerRound
                         miniMapShown={miniMapShown} setMiniMapShown={setMiniMapShown}
 singlePlayerRound={singlePlayerRound} setSinglePlayerRound={setSinglePlayerRound} showDiscordModal={showDiscordModal} setShowDiscordModal={setShowDiscordModal} inCrazyGames={inCrazyGames} countryGuesserCorrect={countryGuesserCorrect} setCountryGuesserCorrect={setCountryGuesserCorrect} showCountryButtons={showCountryButtons} setShowCountryButtons={setShowCountryButtons} otherOptions={otherOptions} countryGuesser={true} countryGuessrMode={countryGuessrMode} options={options} countryStreak={countryStreak} setCountryStreak={setCountryStreak} hintShown={hintShown} setHintShown={setHintShown} pinPoint={pinPoint} setPinPoint={setPinPoint} showAnswer={showAnswer} setShowAnswer={setShowAnswer} loading={loading} setLoading={setLoading} session={session} gameOptionsModalShown={gameOptionsModalShown} setGameOptionsModalShown={setGameOptionsModalShown} mapModal={mapModal} latLong={latLong} loadLocation={loadLocation} gameOptions={gameOptions} setGameOptions={setGameOptions} />
                 </div>}
-
-                {/* (!welcomeOverlayShown || svPreloadReady): while the welcome
-                    overlay is up (modal A/B variant), GameUI's mount is what
-                    triggers the round-1 street view load — deferred to
-                    load+idle, see svPreloadReady */}
-                {screen === "onboarding" && (onboarding?.round || onboarding?.completed) && (!welcomeOverlayShown || svPreloadReady) && <div className="home__onboarding">
+{screen === "onboarding" && (onboarding?.round || onboarding?.completed) && (!welcomeOverlayShown || svPreloadReady) && <div className="home__onboarding">
                     <GameUI
                         inCoolMathGames={inCoolMathGames}
                         inGameDistribution={inGameDistribution}
@@ -6325,14 +6201,7 @@ singlePlayerRound={singlePlayerRound} setSinglePlayerRound={setSinglePlayerRound
                         miniMapShown={miniMapShown} setMiniMapShown={setMiniMapShown}
                         inCrazyGames={inCrazyGames} options={options} timeOffset={timeOffset} ws={ws} backBtnPressed={backBtnPressed} multiplayerState={multiplayerState} pinPoint={pinPoint} setPinPoint={setPinPoint} loading={loading} setLoading={setLoading} session={session} latLong={latLong} loadLocation={() => { }} gameOptions={multiplayerGameOptions} setGameOptions={() => { }} showAnswer={multiplayerShowAnswer} setShowAnswer={guessMultiplayer} />
                 )}
-
-                {/* End screen for PUBLIC matchmade duels (ranked 1v1 + 2v2) —
-                    private games (party team duels set duelEnd too) are owned
-                    by GameUI's mounts; without the public gate both screens
-                    stack and every button shows twice. Keep this after GameUI:
-                    the final answer map also uses z-index 1000, so later DOM
-                    order lets the summary's fade-in remain visible. */}
-                {showPublicDuelEndScreen && (
+{showPublicDuelEndScreen && (
                     <RoundOverScreen
                         duel={true}
                         data={multiplayerState?.gameData?.duelEnd ?? deriveTeamEndFallback(multiplayerState?.gameData)}
