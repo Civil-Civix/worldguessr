@@ -1280,8 +1280,6 @@ export default function Home({ initialScreen, dailyBootstrap, initialLocation = 
     // check if ?coolmath=true
     useEffect(() => {
         if (process.env.NEXT_PUBLIC_COOLMATH === "true") {
-            window.lastCoolmathAd = Date.now();
-
             // Fade out and remove the static HTML splash from _document.js
             const splash = document.getElementById('cmg-splash');
             if (splash) {
@@ -1306,7 +1304,50 @@ export default function Home({ initialScreen, dailyBootstrap, initialLocation = 
         }
     }, [])
 
+    // Handle Google OAuth redirect callback without initializing any ad SDK.
+    useEffect(() => {
+            // Handle Google OAuth redirect callback (redirect flow for iframe compatibility)
+            const params = new URLSearchParams(window.location.search);
+            const code = params.get("code");
+            if (code) {
+                // Clean the code from URL
+                window.history.replaceState({}, '', window.location.pathname);
+                setLoginQueued(true);
+                fetchWithFallback(
+                    clientConfig().authUrl + "/api/googleAuth",
+                    clientConfig().apiUrl + "/api/googleAuth",
+                    {
+                        body: JSON.stringify({ code, redirect_uri: window.location.origin + window.location.pathname }),
+                        method: "POST",
+                        headers: { 'Content-Type': 'application/json' }
+                    },
+                    'googleAuthRedirect',
+                    {}
+                ).then((res) => res.json()).then((data) => {
+                    if (data.secret) {
+                        sendEvent(data.username ? "login" : "sign_up", { method: "google" });
+                        // Shared store first, same as the popup flow above.
+                        publishSession(data);
+                        setSession({ token: data });
+                        window.localStorage.setItem("wg_secret", data.secret);
+                    } else if (data.error) {
+                        // Same as the popup flow: surface an explicit server
+                        // refusal (banned-identity re-signup) verbatim.
+                        console.error("[Auth] redirect sign-in refused:", data.error);
+                        toast.error(data.error, { autoClose: 12000 });
+                    } else {
+                        console.error("[Auth] redirect login: no secret received");
+                        toast.error("Login error, contact support if this persists");
+                    }
+                }).catch((e) => {
+                    console.error("[Auth] redirect login failed:", e);
+                    toast.error("Login failed, please try again");
+                }).finally(() => {
+                    setLoginQueued(false);
+                });
+            }
 
+    }, [])
 
     useEffect(() => {
         if (screen === "singleplayer" || screen === "countryGuesser") {
@@ -1766,29 +1807,7 @@ export default function Home({ initialScreen, dailyBootstrap, initialLocation = 
                     return;
                 }
 
-                if (inIframe() && window.adBreak && !inCrazyGames && !inPoki) {
-                    window.onboardPrerollEnd = false;
-                    setLoading(true)
-                    window.adBreak({
-                        type: "preroll",
-                        adBreakDone: function (e) {
-                            if (window.onboardPrerollEnd) return;
-                            setLoading(false)
-                            window.onboardPrerollEnd = true;
-                            sendEvent("interstitial", { type: "preroll", ...e })
-                            startOnboarding()
-                        }
-                    })
-
-                    setTimeout(() => {
-                        if (!window.onboardPrerollEnd) {
-                            window.onboardPrerollEnd = true;
-                            setLoading(false)
-                            startOnboarding()
-                        }
-                    }, 3000)
-                } else if (!inCrazyGames) {
-
+                if (!inCrazyGames) {
                     startOnboarding()
                 }
             }
@@ -3536,134 +3555,11 @@ export default function Home({ initialScreen, dailyBootstrap, initialLocation = 
         }
     }
 
-    function crazyMidgame(adFinishedRaw = () => { }) {
-        // Ads are disabled in this build.
-        adFinishedRaw();
+    function crazyMidgame(after = () => {}) {
+        // Ads are disabled in this build. Preserve the callback contract so
+        // existing navigation/game-exit paths continue to work normally.
+        after();
     }
-) {
-        // Silence music/SFX for the whole ad break (Poki QA requires it; CG
-        // wants it too). Every exit path below funnels through adFinished, so
-        // the unduck can't be missed. The no-ad fallthrough ducks and unducks
-        // back-to-back, which is inaudible.
-        duckAudio(true);
-        const adFinished = () => { duckAudio(false); adFinishedRaw(); };
-        if (window.inCrazyGames && window.CrazyGames.SDK.environment !== "disabled") {
-            try {
-                const callbacks = {
-                    adFinished: () => adFinished(),
-                    adError: (error) => adFinished(),
-                };
-                window.CrazyGames.SDK.ad.requestAd("midgame", callbacks);
-            } catch (e) {
-                console.warn("error requesting midgame ad", e)
-                adFinished()
-            }
-        } else if (process.env.NEXT_PUBLIC_COOLMATH === "true" && Date.now() - window.lastCoolmathAd > 600000) {
-            try {
-                window.lastCoolmathAd = Date.now();
-                let cleanedUp = false;
-                let safetyTimeout = null;
-                const cleanup = () => {
-                    if (cleanedUp) return;
-                    cleanedUp = true;
-                    document.removeEventListener("adBreakStart", onStart);
-                    document.removeEventListener("adBreakComplete", onEnd);
-                    if (safetyTimeout) {
-                        clearTimeout(safetyTimeout);
-                        safetyTimeout = null;
-                    }
-                };
-                function onEnd() {
-                    cleanup();
-                    adFinished();
-                }
-                function onStart() {
-                    // Real ad started — cancel the no-fill fallback so it can't resume mid-ad.
-                    if (safetyTimeout) {
-                        clearTimeout(safetyTimeout);
-                        safetyTimeout = null;
-                    }
-                }
-                document.addEventListener("adBreakStart", onStart);
-                document.addEventListener("adBreakComplete", onEnd);
-                window.cmgAdBreak();
-                // Fallback: if adBreakComplete never fires (no fill, blocker), release listeners and resume.
-                safetyTimeout = setTimeout(() => {
-                    console.warn("CMG ad timeout, forcing resume");
-                    cleanup();
-                    adFinished();
-                }, 15000);
-            } catch (e) {
-                console.warn("error requesting midgame ad", e)
-                adFinished()
-            }
-        } else if (process.env.NEXT_PUBLIC_POKI === "true") {
-            try {
-                // window.poki is only set after PokiSDK.init() resolves; the SDK
-                // self-throttles ad frequency and resolves immediately on no-fill.
-                if (window.poki && window.PokiSDK) {
-                    window.PokiSDK.commercialBreak().then(() => adFinished()).catch(() => adFinished());
-                } else {
-                    adFinished();
-                }
-            } catch (e) {
-                console.warn("error requesting poki commercial break", e)
-                adFinished()
-            }
-        } else if (process.env.NEXT_PUBLIC_GAMEDISTRIBUTION === "true") {
-            // The SDK initialization owns the GD request lifecycle so preroll
-            // and midgame ads share identical promise/event/timeout cleanup.
-            if (typeof window.requestGDInterstitial === 'function') {
-                window.requestGDInterstitial(adFinished);
-                return;
-            }
-            try {
-                if (typeof gdsdk !== 'undefined' && typeof gdsdk.showAd !== 'undefined') {
-                    // Clear any previous pending state to avoid leaking the prior closure.
-                    if (window._gdAdTimeout) {
-                        clearTimeout(window._gdAdTimeout);
-                        window._gdAdTimeout = null;
-                    }
-                    window._gdAdFinished = adFinished;
-                    // Every exit path funnels through onGDResumeGame: it
-                    // removes the ad-break UI hide, clears the timeout and
-                    // consumes _gdAdFinished exactly once (idempotent, so
-                    // promise + SDK event + timeout can all fire safely).
-                    const resume = () => {
-                        if (window.onGDResumeGame) { window.onGDResumeGame(); return; }
-                        if (window._gdAdTimeout) {
-                            clearTimeout(window._gdAdTimeout);
-                            window._gdAdTimeout = null;
-                        }
-                        const cb = window._gdAdFinished;
-                        window._gdAdFinished = null;
-                        if (cb) cb();
-                    };
-                    // Safety timeout in case SDK events never fire (dev mode, errors)
-                    window._gdAdTimeout = setTimeout(() => {
-                        console.warn("GD ad timeout, forcing resume");
-                        resume();
-                    }, 15000);
-                    const res = gdsdk.showAd('interstitial');
-                    // No-fill ("Promo not found") REJECTS this promise but does
-                    // not reliably follow with SDK_GAME_START — relying on
-                    // events alone left the round stuck until the 15s timeout.
-                    // The promise is the authoritative completion signal.
-                    if (res && typeof res.then === 'function') {
-                        res.then(resume).catch(resume);
-                    }
-                } else {
-                    adFinished();
-                }
-            } catch (e) {
-                console.warn("error requesting GD midgame ad", e);
-                adFinished();
-            }
-        } else {
-            adFinished()
-        }
-    }
-
 
     useEffect(() => {
         window.crazyMidgame = crazyMidgame;
@@ -3932,7 +3828,6 @@ export default function Home({ initialScreen, dailyBootstrap, initialLocation = 
                 }))
                 clearLocation();
             };
-            // Show midgame ad when leaving an active singleplayer game
             if (screen === "singleplayer" || screen === "countryGuesser") {
                 // crazyMidgame(afterBack);
                 afterBack();
@@ -4523,16 +4418,6 @@ export default function Home({ initialScreen, dailyBootstrap, initialLocation = 
     );
     const multiplayerGameUiShown = !!(
         multiplayerState?.inGame && ['guess', 'getready', 'end'].includes(multiplayerGameState)
-    );
-    // Public duels can emit one short `waiting` snapshot after pairing and
-    // before Game.start() advances them to `getready`. Keep the queue's ad
-    // instance alive through that bridge too — otherwise the creative would
-    // still be torn down between matching and the first countdown.
-    const multiplayerMatchedDuelWaiting = !!(
-        multiplayerState?.inGame &&
-        multiplayerGameState === 'waiting' &&
-        multiplayerState?.gameData?.public &&
-        multiplayerState?.gameData?.duel
     );
     const isTeam2v2EndScreen = !!(
         screen === "multiplayer" &&
