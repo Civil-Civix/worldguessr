@@ -304,12 +304,12 @@
 .map-modal-content,
 .maps-page,
 .user-profile-page {
-    --r: var(--accWashR, 20);
-    --g: var(--accWashG, 65);
-    --b: var(--accWashB, 25);
-    --surfR: var(--accSurfR, 36);
-    --surfG: var(--accSurfG, 87);
-    --surfB: var(--accSurfB, 52);
+    --r: var(--accWashR, 0);
+    --g: var(--accWashG, 170);
+    --b: var(--accWashB, 220);
+    --surfR: var(--accSurfR, 20);
+    --surfG: var(--accSurfG, 200);
+    --surfB: var(--accSurfB, 240);
     /* Same three source properties as --r/--g/--b, DIFFERENT fallbacks, because
        the stock modal wash is its own tone (see --washChannels at :root). An
        equipped background has one wash colour and both bases take it; stock
