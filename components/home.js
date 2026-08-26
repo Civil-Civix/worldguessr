@@ -5882,7 +5882,7 @@ export default function Home({ initialScreen, dailyBootstrap, initialLocation = 
                                     {onboardingCompleted && (
 
                                         <>
-                                            <h1 className={`home__title g2_nav_title wg_font ${navSlideOut ? 'g2_slide_out' : ''}`}>WorldGuessr</h1>
+                                            <h1 className={`home__title g2_nav_title wg_font ${navSlideOut ? 'g2_slide_out' : ''}`}>Bens Wacky WorldGuessr</h1>
 
                                             {/* <MaintenanceBanner /> */}
                                         </>
